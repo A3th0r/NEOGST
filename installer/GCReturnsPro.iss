@@ -1,15 +1,19 @@
 ; Inno Setup script — builds GCReturnsPro-Setup.exe (compiled by GitHub Actions)
-; Compile with:  iscc /DExtId=<32-char Chrome Web Store ID> GCReturnsPro.iss
-; Optional:      /DEdgeExtId=<Edge Add-ons ID>  (otherwise Edge uses the Chrome Web Store copy)
+; Compile with:  iscc /DExtId=<32-char Extension ID derived from your .pem key> GCReturnsPro.iss
+; Optional:      /DUpdateXmlUrl=<URL to your hosted update.xml>
+
 #ifndef MyVersion
   #define MyVersion "2.8.0"
 #endif
 #ifndef ExtId
-  #error ExtId is required: publish the extension (Unlisted is fine) on the Chrome Web Store and pass /DExtId=...
+  #error ExtId is required: pass the 32-character extension ID generated from your private .pem key (/DExtId=...)
 #endif
-#define SiteUrl "https://a3th0r.github.io/NEOGST/"
-#define CwsUrl  "https://clients2.google.com/service/update2/crx"
-#define EdgeUrl "https://edge.microsoft.com/extensionwebstorebase/v1/crx"
+#ifndef UpdateXmlUrl
+  #define UpdateXmlUrl "https://a3th0r.github.io/NEOGST/extension/update.xml"
+#endif
+
+#define SiteUrl       "https://a3th0r.github.io/NEOGST/"
+#define AllowedOrigin "https://a3th0r.github.io/*"
 
 [Setup]
 AppId={{6F1C2E0B-4C0A-4E6B-9C33-7A0E5D1B2A11}
@@ -43,32 +47,27 @@ Filename: "{#SiteUrl}"; Description: "Open GC Returns Pro website"; Flags: posti
 [Messages]
 WizardLicense=User Consent
 LicenseLabel=Please read this consent policy carefully.
-LicenseLabel3=GC Returns Pro will automatically install a browser extension in Google Chrome, Microsoft Edge and Brave. The extension accesses the GST portal and its cookies on your behalf. If you do not consent, setup will exit and nothing will be installed.
+LicenseLabel3=GC Returns Pro will automatically install a browser extension in Google Chrome, Microsoft Edge and Brave using enterprise policy. The extension accesses the GST portal and its cookies on your behalf. If you do not consent, setup will exit and nothing will be installed.
 LicenseAccepted=I &consent to installing the extension and to it accessing the GST portal and its cookies
 LicenseNotAccepted=I do &not consent (exit setup)
 FinishedLabel=GC Returns Pro is installed.%n%nThe extension will appear automatically in Chrome, Edge and Brave within a minute (restart the browser if it is already open). It will show as "Installed by your administrator".%n%nTo remove it, uninstall "GC Returns Pro" from Windows Settings > Apps.%n%nWebsite: {#SiteUrl}
 
 [Code]
 const
-  ChromeKey = 'SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist';
-  EdgeKey   = 'SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist';
-  BraveKey  = 'SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist';
+  ChromeForceKey  = 'SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist';
+  EdgeForceKey    = 'SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist';
+  BraveForceKey   = 'SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallForcelist';
+
+  ChromeSourceKey = 'SOFTWARE\Policies\Google\Chrome\ExtensionInstallSources';
+  EdgeSourceKey   = 'SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallSources';
+  BraveSourceKey  = 'SOFTWARE\Policies\BraveSoftware\Brave\ExtensionInstallSources';
 
 var
   Declined: Boolean;
 
-function CwsEntry: string;
+function SelfHostedEntry: string;
 begin
-  Result := '{#ExtId};{#CwsUrl}';
-end;
-
-function EdgeEntry: string;
-begin
-#ifdef EdgeExtId
-  Result := '{#EdgeExtId};{#EdgeUrl}';
-#else
-  Result := '{#ExtId};{#CwsUrl}';
-#endif
+  Result := '{#ExtId};{#UpdateXmlUrl}';
 end;
 
 function EntryId(Entry: string): string;
@@ -76,9 +75,8 @@ begin
   Result := Copy(Entry, 1, Pos(';', Entry) - 1);
 end;
 
-{ Adds our entry without overwriting other force-installed extensions.
-  Reuses our own slot if present, otherwise takes the first free number. }
-procedure AddForcelist(SubKey, Entry: string);
+{ Adds an entry to a numbered policy list (1, 2, 3...) without overwriting existing entries }
+procedure AddNumberedPolicy(SubKey, Entry, MatchPrefix: string);
 var
   I: Integer;
   V: string;
@@ -90,7 +88,7 @@ begin
       RegWriteStringValue(HKLM64, SubKey, IntToStr(I), Entry);
       exit;
     end;
-    if Pos(LowerCase(EntryId(Entry)), LowerCase(V)) = 1 then
+    if Pos(LowerCase(MatchPrefix), LowerCase(V)) = 1 then
     begin
       RegWriteStringValue(HKLM64, SubKey, IntToStr(I), Entry);
       exit;
@@ -98,8 +96,8 @@ begin
   end;
 end;
 
-{ Removes only our entry; deletes the key if it ends up empty. }
-procedure RemoveForcelist(SubKey, Id: string);
+{ Removes matching entry from a numbered policy list and deletes the key if empty }
+procedure RemoveNumberedPolicy(SubKey, MatchPrefix: string);
 var
   Names: TArrayOfString;
   I: Integer;
@@ -108,7 +106,7 @@ begin
   if not RegGetValueNames(HKLM64, SubKey, Names) then exit;
   for I := 0 to GetArrayLength(Names) - 1 do
     if RegQueryStringValue(HKLM64, SubKey, Names[I], V) and
-       (Pos(LowerCase(Id), LowerCase(V)) = 1) then
+       (Pos(LowerCase(MatchPrefix), LowerCase(V)) = 1) then
       RegDeleteValue(HKLM64, SubKey, Names[I]);
   RegDeleteKeyIfEmpty(HKLM64, SubKey);
 end;
@@ -150,14 +148,24 @@ begin
   end;
 end;
 
-{ Policies are written only after consent, at the end of installation }
+{ Enterprise policies are written only after consent, at the end of installation }
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Entry: string;
 begin
   if CurStep = ssPostInstall then
   begin
-    AddForcelist(ChromeKey, CwsEntry);
-    AddForcelist(EdgeKey,   EdgeEntry);
-    AddForcelist(BraveKey,  CwsEntry);
+    Entry := SelfHostedEntry;
+
+    { 1. Allow self-hosted extension downloads from your domain }
+    AddNumberedPolicy(ChromeSourceKey, '{#AllowedOrigin}', '{#AllowedOrigin}');
+    AddNumberedPolicy(EdgeSourceKey,   '{#AllowedOrigin}', '{#AllowedOrigin}');
+    AddNumberedPolicy(BraveSourceKey,  '{#AllowedOrigin}', '{#AllowedOrigin}');
+
+    { 2. Force-install the extension via your update.xml }
+    AddNumberedPolicy(ChromeForceKey, Entry, '{#ExtId}');
+    AddNumberedPolicy(EdgeForceKey,   Entry, '{#ExtId}');
+    AddNumberedPolicy(BraveForceKey,  Entry, '{#ExtId}');
   end;
 end;
 
@@ -165,12 +173,12 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usUninstall then
   begin
-    RemoveForcelist(ChromeKey, '{#ExtId}');
-    RemoveForcelist(BraveKey,  '{#ExtId}');
-#ifdef EdgeExtId
-    RemoveForcelist(EdgeKey,   '{#EdgeExtId}');
-#else
-    RemoveForcelist(EdgeKey,   '{#ExtId}');
-#endif
+    RemoveNumberedPolicy(ChromeForceKey,  '{#ExtId}');
+    RemoveNumberedPolicy(EdgeForceKey,    '{#ExtId}');
+    RemoveNumberedPolicy(BraveForceKey,   '{#ExtId}');
+
+    RemoveNumberedPolicy(ChromeSourceKey, '{#AllowedOrigin}');
+    RemoveNumberedPolicy(EdgeSourceKey,   '{#AllowedOrigin}');
+    RemoveNumberedPolicy(BraveSourceKey,  '{#AllowedOrigin}');
   end;
 end;
