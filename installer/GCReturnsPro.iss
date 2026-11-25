@@ -1,15 +1,36 @@
 ; Inno Setup script — builds GCReturnsPro-Setup.exe (compiled by GitHub Actions)
-; Compile with:  iscc /DExtId=<32-char Extension ID derived from your .pem key> GCReturnsPro.iss
-; Optional:      /DUpdateXmlUrl=<URL to your hosted update.xml>
+;
+; Compile:   iscc GCReturnsPro.iss
+; Options:   /DExtId=<32-char id>        (defaults to the ID derived from manifest.json "key")
+;            /DEdgeExtId=<id>            (only if the Edge Add-ons ID differs; WebStore mode)
+;            /DUpdateXmlUrl=<url>        (self-hosted update.xml)
+;            /DWebStore=1                (force-install from Chrome Web Store / Edge Add-ons)
+;
+; IMPORTANT - self-hosted vs Web Store:
+;   Chrome, Edge and Brave on Windows IGNORE force-install of off-store extensions
+;   (update.xml + .crx) unless the PC is domain-joined / MDM- or CBCM-managed.
+;   On ordinary home/office PCs use /DWebStore=1 (publish the extension as
+;   "Unlisted" on the Chrome Web Store) - that works on every Windows PC.
 
 #ifndef MyVersion
   #define MyVersion "2.8.31"
 #endif
 #ifndef ExtId
-  #error ExtId is required: pass the 32-character extension ID generated from your private .pem key (/DExtId=...)
+  #define ExtId "jgbigkbpalolljkpdccfkpagjghcpkol"
+#endif
+#ifndef EdgeExtId
+  #define EdgeExtId ExtId
 #endif
 #ifndef UpdateXmlUrl
   #define UpdateXmlUrl "https://a3th0r.github.io/NEOGST/extension/update.xml"
+#endif
+
+#ifdef WebStore
+  #define ChromeUpdateUrl "https://clients2.google.com/service/update2/crx"
+  #define EdgeUpdateUrl   "https://edge.microsoft.com/extensionwebstorebase/v1/crx"
+#else
+  #define ChromeUpdateUrl UpdateXmlUrl
+  #define EdgeUpdateUrl   UpdateXmlUrl
 #endif
 
 #define SiteUrl       "https://a3th0r.github.io/NEOGST/"
@@ -65,35 +86,58 @@ const
 var
   Declined: Boolean;
 
-function SelfHostedEntry: string;
+{ Brave uses the Chrome Web Store, so it shares the Chrome entry }
+function ChromeEntry: string;
 begin
-  Result := '{#ExtId};{#UpdateXmlUrl}';
+  Result := '{#ExtId};{#ChromeUpdateUrl}';
 end;
 
-function EntryId(Entry: string): string;
+function EdgeEntry: string;
 begin
-  Result := Copy(Entry, 1, Pos(';', Entry) - 1);
+  Result := '{#EdgeExtId};{#EdgeUpdateUrl}';
 end;
 
-{ Adds an entry to a numbered policy list (1, 2, 3...) without overwriting existing entries }
+{ Self-hosted mode only: is update.xml actually downloadable? }
+function UpdateXmlReachable: Boolean;
+var
+  Req: Variant;
+begin
+  Result := False;
+  try
+    Req := CreateOleObject('WinHttp.WinHttpRequest.5.1');
+    Req.Open('GET', '{#UpdateXmlUrl}', False);
+    Req.SetTimeouts(5000, 5000, 5000, 10000);
+    Req.Send('');
+    Result := (Req.Status = 200);
+    Log('update.xml HTTP status: ' + IntToStr(Req.Status));
+  except
+    Log('update.xml check failed: ' + GetExceptionMessage);
+  end;
+end;
+
+{ Adds an entry to a numbered policy list (1, 2, 3...) without overwriting other entries.
+  Existing entry with the same prefix is replaced; otherwise the first free slot is used. }
 procedure AddNumberedPolicy(SubKey, Entry, MatchPrefix: string);
 var
-  I: Integer;
+  I, FreeSlot: Integer;
   V: string;
 begin
+  FreeSlot := 0;
   for I := 1 to 1000 do
   begin
-    if not RegQueryStringValue(HKLM64, SubKey, IntToStr(I), V) then
+    if RegQueryStringValue(HKLM64, SubKey, IntToStr(I), V) then
     begin
-      RegWriteStringValue(HKLM64, SubKey, IntToStr(I), Entry);
-      exit;
-    end;
-    if Pos(LowerCase(MatchPrefix), LowerCase(V)) = 1 then
-    begin
-      RegWriteStringValue(HKLM64, SubKey, IntToStr(I), Entry);
-      exit;
-    end;
+      if Pos(LowerCase(MatchPrefix), LowerCase(V)) = 1 then
+      begin
+        RegWriteStringValue(HKLM64, SubKey, IntToStr(I), Entry);
+        exit;
+      end;
+    end
+    else if FreeSlot = 0 then
+      FreeSlot := I;
   end;
+  if FreeSlot = 0 then FreeSlot := 1001;
+  RegWriteStringValue(HKLM64, SubKey, IntToStr(FreeSlot), Entry);
 end;
 
 { Removes matching entry from a numbered policy list and deletes the key if empty }
@@ -150,22 +194,29 @@ end;
 
 { Enterprise policies are written only after consent, at the end of installation }
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  Entry: string;
 begin
   if CurStep = ssPostInstall then
   begin
-    Entry := SelfHostedEntry;
-
-    { 1. Allow self-hosted extension downloads from your domain }
+#ifndef WebStore
+    { 1. Allow self-hosted downloads from your domain }
     AddNumberedPolicy(ChromeSourceKey, '{#AllowedOrigin}', '{#AllowedOrigin}');
     AddNumberedPolicy(EdgeSourceKey,   '{#AllowedOrigin}', '{#AllowedOrigin}');
     AddNumberedPolicy(BraveSourceKey,  '{#AllowedOrigin}', '{#AllowedOrigin}');
+#endif
 
-    { 2. Force-install the extension via your update.xml }
-    AddNumberedPolicy(ChromeForceKey, Entry, '{#ExtId}');
-    AddNumberedPolicy(EdgeForceKey,   Entry, '{#ExtId}');
-    AddNumberedPolicy(BraveForceKey,  Entry, '{#ExtId}');
+    { 2. Force-install the extension }
+    AddNumberedPolicy(ChromeForceKey, ChromeEntry, '{#ExtId}');
+    AddNumberedPolicy(EdgeForceKey,   EdgeEntry,   '{#EdgeExtId}');
+    AddNumberedPolicy(BraveForceKey,  ChromeEntry, '{#ExtId}');
+
+#ifndef WebStore
+    if (not WizardSilent) and (not UpdateXmlReachable) then
+      MsgBox('The policies were written, but the extension update file could not be downloaded:' + #13#10 +
+             '{#UpdateXmlUrl}' + #13#10#13#10 +
+             'Check your internet connection and that the file is published. ' +
+             'Open chrome://policy and chrome://extensions to see the status.',
+             mbError, MB_OK);
+#endif
   end;
 end;
 
@@ -174,7 +225,7 @@ begin
   if CurUninstallStep = usUninstall then
   begin
     RemoveNumberedPolicy(ChromeForceKey,  '{#ExtId}');
-    RemoveNumberedPolicy(EdgeForceKey,    '{#ExtId}');
+    RemoveNumberedPolicy(EdgeForceKey,    '{#EdgeExtId}');
     RemoveNumberedPolicy(BraveForceKey,   '{#ExtId}');
 
     RemoveNumberedPolicy(ChromeSourceKey, '{#AllowedOrigin}');
