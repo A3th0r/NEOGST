@@ -1,0 +1,634 @@
+"use strict";
+
+// Website bridge (GitHub Pages site -> this extension). See site-bridge.js.
+importScripts("site-bridge.js");
+
+const runtimeApi =
+  typeof browser !== "undefined"
+    ? browser
+    : typeof chrome !== "undefined"
+      ? chrome
+      : null;
+const actionApi = runtimeApi.action || runtimeApi.browserAction;
+
+function injectScripts(tabId, files, callback) {
+  if (runtimeApi.scripting && runtimeApi.scripting.executeScript) {
+    runtimeApi.scripting.executeScript(
+      {
+        target: { tabId },
+        files,
+      },
+      () => {
+        if (typeof callback === "function") callback();
+      },
+    );
+    return;
+  }
+
+  const queue = Array.isArray(files) ? files.slice() : [];
+  const runNext = () => {
+    const file = queue.shift();
+    if (!file) {
+      if (typeof callback === "function") callback();
+      return;
+    }
+    runtimeApi.tabs.executeScript(tabId, { file }, runNext);
+  };
+  runNext();
+}
+
+// Icon click is handled by default_popup in manifest.json (opens popup.html).
+
+
+const pendingLoginByTab = new Map();
+const pendingSearchByTab = new Map();
+let lastGstTabId = null;
+let pendingSearchTpTabCallbacks = [];
+const isGstUrl = (url) =>
+  typeof url === "string" &&
+  /https:\/\/(services|return|payment|gstr2b)\.gst\.gov\.in\//i.test(url);
+
+function getExistingTab(tabId, callback) {
+  if (typeof tabId !== "number") {
+    callback(null);
+    return;
+  }
+  runtimeApi.tabs.get(tabId, (tab) => {
+    if (runtimeApi.runtime && runtimeApi.runtime.lastError) {
+      callback(null);
+      return;
+    }
+    callback(tab || null);
+  });
+}
+
+function resolveActiveGstTabId(callback) {
+  const finish = (tabId) => callback(typeof tabId === "number" ? tabId : null);
+  if (typeof lastGstTabId === "number") {
+    getExistingTab(lastGstTabId, (tab) => {
+      if (tab && isGstUrl(tab.url)) {
+        finish(tab.id);
+        return;
+      }
+      lastGstTabId = null;
+      runtimeApi.tabs.query({}, (tabs) => {
+        const gstTab = (tabs || []).find((item) => item && typeof item.id === "number" && isGstUrl(item.url));
+        if (gstTab) lastGstTabId = gstTab.id;
+        finish(gstTab ? gstTab.id : null);
+      });
+    });
+    return;
+  }
+  runtimeApi.tabs.query({}, (tabs) => {
+    const gstTab = (tabs || []).find((item) => item && typeof item.id === "number" && isGstUrl(item.url));
+    if (gstTab) lastGstTabId = gstTab.id;
+    finish(gstTab ? gstTab.id : null);
+  });
+}
+
+function sendMessageToTabWithContentScript(tabId, message, sendResponse) {
+  const respond = (resp) => {
+    if (runtimeApi.runtime && runtimeApi.runtime.lastError) {
+      sendResponse({ status: false, error: runtimeApi.runtime.lastError.message });
+      return;
+    }
+    sendResponse(resp);
+  };
+
+  const send = () => {
+    runtimeApi.tabs.sendMessage(tabId, message, respond);
+  };
+
+  injectScripts(tabId, ["contentscript.js"], () => {
+    if (runtimeApi.runtime && runtimeApi.runtime.lastError) {
+      send();
+      return;
+    }
+    send();
+  });
+}
+
+function sendMissingTabId(sendResponse) {
+  sendResponse({ status: false, error: "Missing tabId" });
+}
+
+function forwardToTab(tabId, message, sendResponse) {
+  const candidateTabId = typeof tabId === "number" ? tabId : null;
+  const sendToResolvedTab = (resolvedTabId) => {
+    if (!resolvedTabId) {
+      sendMissingTabId(sendResponse);
+      return;
+    }
+    sendMessageToTabWithContentScript(resolvedTabId, message, sendResponse);
+  };
+  if (candidateTabId) {
+    getExistingTab(candidateTabId, (tab) => {
+      if (tab && isGstUrl(tab.url)) {
+        lastGstTabId = tab.id;
+        sendToResolvedTab(tab.id);
+        return;
+      }
+      resolveActiveGstTabId(sendToResolvedTab);
+    });
+    return true;
+  }
+  resolveActiveGstTabId(sendToResolvedTab);
+  return true;
+}
+
+function createGstTab(url, pendingMap, payload, sendResponse) {
+  runtimeApi.tabs.create({ url }, (tab) => {
+    if (!tab || typeof tab.id !== "number") return;
+    if (pendingMap) pendingMap.set(tab.id, payload || {});
+    sendResponse({ status: true, tabId: tab.id });
+  });
+}
+
+runtimeApi.tabs.onActivated.addListener((activeInfo) => {
+  if (!activeInfo || typeof activeInfo.tabId !== "number") return;
+  runtimeApi.tabs.get(activeInfo.tabId, (tab) => {
+  if (tab && isGstUrl(tab.url)) {
+      lastGstTabId = tab.id;
+    }
+  });
+});
+
+runtimeApi.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete") return;
+  if (tab && isGstUrl(tab.url)) {
+    lastGstTabId = tabId;
+  }
+});
+
+function ensureSearchTpTab(callback) {
+  const targetUrl = "https://services.gst.gov.in/services/searchtp";
+  if (lastGstTabId) {
+    runtimeApi.tabs.get(lastGstTabId, (tab) => {
+      if (tab && typeof tab.id === "number" && /^https:\/\/services\.gst\.gov\.in\//i.test(tab.url || "")) {
+        callback(tab.id);
+        return;
+      }
+      lastGstTabId = null;
+      ensureSearchTpTab(callback);
+    });
+    return;
+  }
+  if (pendingSearchTpTabCallbacks.length) {
+    pendingSearchTpTabCallbacks.push(callback);
+    return;
+  }
+  pendingSearchTpTabCallbacks.push(callback);
+  runtimeApi.tabs.query({ url: "https://services.gst.gov.in/*" }, (tabs) => {
+    const existing = (tabs || []).find((tab) => tab && typeof tab.id === "number");
+    if (existing) {
+      lastGstTabId = existing.id;
+      const callbacks = pendingSearchTpTabCallbacks.splice(0, pendingSearchTpTabCallbacks.length);
+      callbacks.forEach((fn) => fn(existing.id));
+      return;
+    }
+    runtimeApi.tabs.create({ url: targetUrl, active: true }, (tab) => {
+      if (!tab || typeof tab.id !== "number") {
+        const callbacks = pendingSearchTpTabCallbacks.splice(0, pendingSearchTpTabCallbacks.length);
+        callbacks.forEach((fn) => fn(null));
+        return;
+      }
+      const tabId = tab.id;
+      const listener = (updatedTabId, changeInfo) => {
+        if (updatedTabId !== tabId || changeInfo.status !== "complete") return;
+        runtimeApi.tabs.onUpdated.removeListener(listener);
+        lastGstTabId = tabId;
+        const callbacks = pendingSearchTpTabCallbacks.splice(0, pendingSearchTpTabCallbacks.length);
+        callbacks.forEach((fn) => fn(tabId));
+      };
+      runtimeApi.tabs.onUpdated.addListener(listener);
+    });
+  });
+}
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "open-portal-login") return;
+  createGstTab("https://services.gst.gov.in/services/login", pendingLoginByTab, msg.payload || {}, sendResponse);
+  return true;
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "open-gst-searchtp") return;
+  createGstTab("https://services.gst.gov.in/services/searchtp", pendingSearchByTab, msg.payload || {}, sendResponse);
+  return true;
+});
+
+runtimeApi.runtime.onMessage.addListener((msg) => {
+  if (!msg || msg.type !== "open-download-popup") return;
+  const payload = msg.payload || {};
+  const baseUrl = runtimeApi.runtime.getURL("popup.html");
+  const params = new URLSearchParams();
+  if (payload.tabId) params.set("tabId", String(payload.tabId));
+  if (payload.category) params.set("category", payload.category);
+  if (payload.returnType) params.set("returnType", payload.returnType);
+  const url = params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
+  runtimeApi.tabs.create({ url });
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "portal-ustatus") return;
+  return forwardToTab(msg.tabId, { type: "portal-ustatus" }, sendResponse);
+});
+
+// Reinstall the MAIN-world GST bridge after an extension reload while the
+// portal single-page app is already open.  This is intentionally scoped to
+// the requesting GST tab and only injects our packaged bridge file.
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "ensure-gstr3b-page-bridge") return;
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (!tabId || !runtimeApi.scripting || !runtimeApi.scripting.executeScript) {
+    sendResponse({ status: false, error: "Unable to access the GST portal tab." });
+    return;
+  }
+  runtimeApi.scripting.executeScript(
+    { target: { tabId }, files: ["searchtp-bridge.js"], world: "MAIN", injectImmediately: true },
+    () => {
+      const lastError = runtimeApi.runtime.lastError;
+      sendResponse(lastError ? { status: false, error: lastError.message } : { status: true });
+    },
+  );
+  return true;
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "get-active-gst-tab") return;
+  resolveActiveGstTabId((tabId) => {
+    if (tabId) {
+      sendResponse({ status: true, tabId });
+      return;
+    }
+    sendResponse({ status: false, error: "No GST tab found" });
+  });
+  return true;
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "portal-profile-detail") return;
+  return forwardToTab(msg.tabId, { type: "portal-profile-detail" }, sendResponse);
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "portal-profile-contacts") return;
+  return forwardToTab(msg.tabId, { type: "portal-profile-contacts" }, sendResponse);
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "portal-busplaces") return;
+  return forwardToTab(msg.tabId, { type: "portal-busplaces" }, sendResponse);
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "portal-filing-snapshot") return;
+  return forwardToTab(msg.tabId, { type: "portal-filing-snapshot" }, sendResponse);
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "searchtp-return-status") return;
+  const tabId = msg.tabId;
+  if (tabId) {
+    return forwardToTab(tabId, { type: "searchtp-return-status", payload: msg.payload || {} }, sendResponse);
+  }
+  ensureSearchTpTab((gstTabId) => {
+    if (!gstTabId) {
+      sendResponse({
+        status: false,
+        gstin: String((msg.payload && msg.payload.gstin) || "").trim().toUpperCase(),
+        error: "Unable to open GST portal tab.",
+      });
+      return;
+    }
+    forwardToTab(gstTabId, { type: "searchtp-return-status", payload: msg.payload || {} }, sendResponse);
+  });
+  return true;
+});
+
+// Generic cross-origin authenticated fetch, callable from popup.js without
+// needing a content-script connected to any particular tab. This is the
+// mechanism that actually removes the "open GSTR-2B / Create Challan
+// manually first" requirement: GST portal subdomains (services, return,
+// gstr2b, payment) share session cookies once the user has logged in
+// anywhere on the portal, so a direct background fetch with credentials
+// works the same regardless of which tab (if any) is currently active —
+// the same approach GST Jet and similar tools use.
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "gc-returns-pro-bg-fetch") return;
+  // The GST portal's /auth/ APIs are AJAX endpoints: without these headers the
+  // gateway serves the HTML "Access Denied" page with a 200 status instead of
+  // JSON. Callers can still override either header explicitly.
+  const bgHeaders = Object.assign(
+    {
+      Accept: "application/json, text/plain, */*",
+      "X-Requested-With": "XMLHttpRequest",
+    },
+    msg.headers || {},
+  );
+  xhrRequest(
+    {
+      method: msg.method || "GET",
+      url: msg.url,
+      headers: bgHeaders,
+      responseType: msg.responseType || "text",
+      body: msg.body || null,
+      withCredentials: msg.withCredentials !== false,
+    },
+    (resp) => {
+      const headerMap = {};
+      (resp && resp.headers ? resp.headers : "").split("\r\n").forEach((line) => {
+        const idx = line.indexOf(":");
+        if (idx > 0) headerMap[line.slice(0, idx).trim().toLowerCase()] = line.slice(idx + 1).trim();
+      });
+      sendResponse({
+        status: !!(resp && resp.ok),
+        statusCode: resp ? resp.status : 0,
+        response: resp ? resp.responseText : "",
+        responseBase64: resp ? resp.responseBase64 : "",
+        responseHeaders: headerMap,
+        error: resp && !resp.ok ? resp.error || `HTTP ${resp.status}` : "",
+      });
+    },
+  );
+  return true;
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "searchtp-goodservice") return;
+  const tabId = msg.tabId;
+  if (tabId) {
+    return forwardToTab(tabId, { type: "searchtp-goodservice", payload: msg.payload || {} }, sendResponse);
+  }
+  const gstin = String((msg.payload && msg.payload.gstin) || "").trim().toUpperCase();
+  if (!gstin) {
+    sendResponse({ status: false, error: "Missing GSTIN" });
+    return;
+  }
+  xhrRequest(
+    {
+      method: "POST",
+      url: "https://services.gst.gov.in/services/api/search/taxpayerDetails",
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=utf-8",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+      },
+      body: JSON.stringify({ gstin }),
+    },
+    (resp) => {
+      sendResponse({
+        status: !!(resp && resp.ok),
+        gstin,
+        response: resp ? resp.responseText : "",
+        responseUrl: resp ? resp.finalUrl : "",
+        error: resp && !resp.ok ? resp.error || `taxpayerDetails failed (${resp.status})` : "",
+      });
+    },
+  );
+  return true;
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "public-client-details") return;
+  const gstin = String((msg.payload && msg.payload.gstin) || "").trim().toUpperCase();
+  if (!gstin) {
+    sendResponse({ status: false, error: "Missing GSTIN" });
+    return;
+  }
+  ensureSearchTpTab((gstTabId) => {
+    if (!gstTabId) {
+      sendResponse({ status: false, gstin, error: "Unable to open GST portal tab." });
+      return;
+    }
+    sendMessageToTabWithContentScript(
+      gstTabId,
+      { type: "searchtp-goodservice", payload: { gstin } },
+      (resp) => {
+        sendResponse(
+          resp || {
+            status: false,
+            gstin,
+            error: "GST portal tab did not return a response.",
+          },
+        );
+      },
+    );
+  });
+  return true;
+});
+
+runtimeApi.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!msg || msg.type !== "searchtp-template-status") return;
+  ensureSearchTpTab((gstTabId) => {
+    if (!gstTabId) {
+      sendResponse({ status: false, error: "Unable to open GST portal tab." });
+      return;
+    }
+    sendMessageToTabWithContentScript(
+      gstTabId,
+      { type: "searchtp-template-status" },
+      (resp) => {
+        sendResponse(
+          resp || {
+            status: false,
+            error: "GST portal tab did not return template status.",
+          },
+        );
+      },
+    );
+  });
+  return true;
+});
+
+function xhrRequest(options, callback) {
+  const request = options || {};
+  const method = request.method || "GET";
+  const headers = new Headers();
+  Object.entries(request.headers || {}).forEach(([key, value]) => {
+    if (value != null) headers.set(key, value);
+  });
+
+  let body = request.body || null;
+  if (request.bodyBase64) {
+    const decoded = atob(request.bodyBase64);
+    const bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index += 1) {
+      bytes[index] = decoded.charCodeAt(index);
+    }
+    body = bytes.buffer;
+  }
+
+  fetch(request.url, {
+    method,
+    headers,
+    body,
+    credentials: request.withCredentials === false ? "omit" : "include",
+  })
+    .then(async (response) => {
+      let responseText = "";
+      let responseBase64 = "";
+      if (request.responseType === "arraybuffer") {
+        const buffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = "";
+        for (let index = 0; index < bytes.length; index += 0x8000) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(index, index + 0x8000));
+        }
+        responseBase64 = btoa(binary);
+      } else {
+        responseText = await response.text();
+      }
+
+      const headerText = Array.from(response.headers.entries())
+        .map(([key, value]) => `${key}: ${value}`)
+        .join("\r\n");
+
+      callback({
+        ok: response.ok,
+        status: response.status,
+        responseText,
+        responseBase64,
+        finalUrl: response.url || request.url,
+        headers: headerText,
+      });
+    })
+    .catch((error) => {
+      callback({
+        ok: false,
+        status: 0,
+        error: error && error.message ? error.message : "Background request failed.",
+        finalUrl: request.url || "",
+        responseText: "",
+        responseBase64: "",
+        headers: "",
+      });
+    });
+}
+
+function xhrRequestAsync(options) {
+  return new Promise((resolve) => {
+    xhrRequest(options, (resp) => resolve(resp));
+  });
+}
+
+async function fetchGstSearchReturnStatus(payload) {
+  const gstin = String((payload && payload.gstin) || "").trim().toUpperCase();
+  let year = String((payload && payload.year) || "").trim();
+  let fy = String((payload && payload.fy) || "").trim();
+  if (!gstin) {
+    return { status: false, error: "Missing GSTIN" };
+  }
+
+  if (!year) {
+    year = String(new Date().getMonth() < 3 ? new Date().getFullYear() - 1 : new Date().getFullYear());
+  }
+  if (!fy) fy = year;
+
+  const detailsUrl = "https://services.gst.gov.in/services/api/search/taxpayerDetails";
+  const returnUrl = "https://services.gst.gov.in/services/api/search/taxpayerReturnDetails";
+  const jsonHeaders = {
+    Accept: "application/json, text/plain, */*",
+    "Content-Type": "application/json;charset=utf-8",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  };
+
+  const [taxpayerDetails] = await Promise.all([
+    xhrRequestAsync({
+      method: "POST",
+      url: detailsUrl,
+      headers: jsonHeaders,
+      body: JSON.stringify({ gstin }),
+    }),
+  ]);
+
+  const taxpayerReturnDetails = await xhrRequestAsync({
+    method: "POST",
+    url: returnUrl,
+    headers: jsonHeaders,
+    body: JSON.stringify({ gstin, fy: fy || year }),
+  });
+
+  return {
+    status: !!(taxpayerReturnDetails && taxpayerReturnDetails.ok),
+    gstin,
+    year,
+    fy: fy || year,
+    taxpayerDetails: taxpayerDetails ? taxpayerDetails.responseText : null,
+    taxpayerReturnDetails: taxpayerReturnDetails ? taxpayerReturnDetails.responseText : null,
+    error:
+      taxpayerReturnDetails && !taxpayerReturnDetails.ok
+        ? taxpayerReturnDetails.error || `taxpayerReturnDetails failed (${taxpayerReturnDetails.status})`
+        : "",
+  };
+}
+
+runtimeApi.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status !== "complete") return;
+  if (!pendingLoginByTab.has(tabId)) return;
+  const payload = pendingLoginByTab.get(tabId);
+  pendingLoginByTab.delete(tabId);
+  const sendFill = (attempt) => {
+    runtimeApi.tabs.sendMessage(tabId, { type: "gst-autofill-login", payload }, () => {
+      if (runtimeApi.runtime && runtimeApi.runtime.lastError) {
+        if (attempt < 5) {
+          setTimeout(() => sendFill(attempt + 1), 500 * attempt);
+        }
+      }
+    });
+  };
+  sendFill(1);
+});
+
+runtimeApi.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status !== "complete") return;
+  if (!pendingSearchByTab.has(tabId)) return;
+  const payload = pendingSearchByTab.get(tabId);
+  pendingSearchByTab.delete(tabId);
+  const sendFill = (attempt) => {
+    runtimeApi.tabs.sendMessage(tabId, { type: "gst-fill-searchtp", payload }, () => {
+      if (runtimeApi.runtime && runtimeApi.runtime.lastError) {
+        if (attempt < 5) {
+          setTimeout(() => sendFill(attempt + 1), 500 * attempt);
+        }
+      }
+    });
+  };
+  sendFill(1);
+});
+
+// MV3 Service Worker keep-alive: maintain port connections from content scripts or popup
+// so the service worker is not killed during long-running GST portal requests.
+runtimeApi.runtime.onConnect.addListener((port) => {
+  port.onDisconnect.addListener(() => {});
+});
+
+// ── Download Notifications ──────────────────────────────────────────
+// When popup signals a download has started, watch for completion and notify.
+const pendingDownloadNotifs = new Map(); // downloadId → filename
+
+runtimeApi.runtime.onMessage.addListener((msg) => {
+  if (!msg || msg.type !== "gc-returns-pro-download-started") return;
+  const { downloadId, filename } = msg;
+  if (typeof downloadId === "number" && filename) {
+    pendingDownloadNotifs.set(downloadId, filename);
+  }
+});
+
+runtimeApi.downloads.onChanged.addListener((delta) => {
+  if (!delta || typeof delta.id !== "number") return;
+  if (!delta.state || delta.state.current !== "complete") return;
+  const filename = pendingDownloadNotifs.get(delta.id);
+  if (!filename) return;
+  pendingDownloadNotifs.delete(delta.id);
+
+  runtimeApi.notifications.create(`gc-returns-pro-dl-${delta.id}`, {
+    type: "basic",
+    iconUrl: runtimeApi.runtime.getURL("images/gc-returns-pro-logo-48.png"),
+    title: "GC Returns Pro — Download Complete",
+    message: filename,
+    priority: 1,
+  });
+});

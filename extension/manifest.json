@@ -1,0 +1,81 @@
+{
+  "name": "GC Returns Pro",
+  "short_name": "GC Returns Pro",
+  "author": "Gaddam Chiranjeevi",
+  "version": "2.7.31",
+  "description": "Download GST returns from the GST Portal. Recos unified: the GSTR-3B reference is the horizontal combined sheet (periods across columns) that every ='GSTR-3B'! formula resolves into; the per-period portal view is kept as a hidden 'GSTR-3B (periods)' sheet. Right sides are consolidated single sheets (2B/2A/1) via SUMIFS. Applied to 3B-vs-2B, 3B-vs-2A, 3B-vs-1, 2A-vs-2B, 3B-ECL.",
+  "manifest_version": 3,
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "notifications",
+    "tabs",
+    "cookies",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.gst.gov.in/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://services.gst.gov.in/services/login*"
+      ],
+      "js": [
+        "login-autofill.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://services.gst.gov.in/*",
+        "https://return.gst.gov.in/*"
+      ],
+      "js": [
+        "contentscript.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://services.gst.gov.in/*",
+        "https://return.gst.gov.in/*"
+      ],
+      "js": [
+        "goodservice-bridge.js",
+        "searchtp-bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "action": {
+    "default_title": "GC Returns Pro",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/neogst-logo-16.png",
+      "32": "images/neogst-logo-32.png",
+      "48": "images/neogst-logo-48.png",
+      "128": "images/neogst-logo-128.png"
+    }
+  },
+  "icons": {
+    "16": "images/neogst-logo-16.png",
+    "32": "images/neogst-logo-32.png",
+    "48": "images/neogst-logo-48.png",
+    "128": "images/neogst-logo-128.png"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApktl72fFiL4kyBRgTY62qdsmbiQdBppR04OCB1BZ/V6r9TE65YZwx3w+3OydTFzbGik/ZVa5re+xNJlm1XdZSiBUqgdAR4Hy2cM7spYGFQzvwVECCmwtlhcmn7o5Q/n2R2rFiHNG08cpnJF8FiL2sjS6F5ox0N+o6ekHGEEcI6MSayFC1i/FGeUjJmc/LoiLzZy/t75SUrHD3k3K0Sdy4TBngMeTPRXl+QIR5F4z6hV5IFWGebK37qcdj8TTgf25sEGjme9+S9X7G2ts5YukhC9uWfnVBGSzTTPZ10uSG7uTqBXGayUD9VuU0FphdPUVgWEQT/LkgP2Vt8sAJ9EvNwIDAQAB",
+  "externally_connectable": {
+    "matches": [
+      "https://a3th0r.github.io/*"
+    ]
+  }
+}

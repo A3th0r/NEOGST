@@ -1,0 +1,1 @@
+export default { category:"refund", key:"REFUND_EXPWT", listed:true, order:4, recoKinds:["3B","1SUM","1"], config:{ key:"REFUND_EXPWT", display:"Refund - Export With Payment of Tax", fileNameCode:"REFUND_EXPWT", apiCode:"REFUND_EXPWT", summaryType:"REFUND_EXPWT" } };

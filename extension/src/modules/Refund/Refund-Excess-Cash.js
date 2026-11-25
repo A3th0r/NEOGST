@@ -1,0 +1,1 @@
+export default { category:"refund", key:"REFUND_EXCESS_CASH", listed:true, order:3, recoKinds:["3B"], config:{ key:"REFUND_EXCESS_CASH", display:"Refund - Excess Cash Balance", fileNameCode:"REFUND_EXCESS_CASH", apiCode:"REFUND_EXCESS_CASH", summaryType:"REFUND_EXCESS_CASH" } };

@@ -1,0 +1,1 @@
+export default { category:"reports", key:"G9_PREP", listed:true, order:14, recoKinds:["3B","2B","1SUM","1"], config:{ key:"G9_PREP", display:"GSTR-9 Preparation", fileNameCode:"GSTR9_PREP", apiCode:"GSTR9_PREP", summaryType:"GSTR9_PREP" } };

@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="bootstrap.min.css">
+    <style type="text/css">
+      :root {
+        --bg: #f3f6ff;
+        --bg-accent: #fef6e6;
+        --primary: #1456ff;
+        --success: #167b5b;
+        --warning: #f0b429;
+        --danger: #c62828;
+        --card: #ffffff;
+        --text: #1c2436;
+        --muted: #6f7b8e;
+        --radius: 10px;
+        --shadow: 0 4px 16px rgba(20,34,74,0.10);
+      }
+      html, body {
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font-size: 13px;
+        background: var(--bg);
+        color: var(--text);
+        width: 420px;
+        min-width: 420px;
+        max-width: 420px;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      .shell {
+        padding: 0 0 8px 0;
+        width: 420px;
+      }
+
+      /* ── Header ── */
+      .header-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px 8px;
+        background: linear-gradient(120deg, #e6edff, #ffffff);
+        border-bottom: 1px solid #dfe7ff;
+      }
+      .header-title {
+        font-weight: 700;
+        margin: 0;
+        font-size: 13px;
+      }
+      .header-sub {
+        color: var(--muted);
+        font-size: 11px;
+        margin: 1px 0 0;
+      }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* ── Business info card ── */
+      #businessInfo { display: block; }
+      #businessInfo > .p-3 { padding: 10px 12px 0 !important; }
+
+      .biz-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      .biz-header .header-title { font-size: 12px; }
+
+      /* Action controls relocated from the old header bar */
+      .biz-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .biz-actions .btn-sm { font-size: 11px; }
+      body.dark .biz-actions { border-color: #2a3050; }
+
+      /* ── Workspace / selectors ── */
+      #workspace { display: block; }
+      .info-grid {
+        display: block;
+        padding: 0 0 6px;
+      }
+      .info-grid > div { margin-bottom: 8px; }
+
+      .info-label {
+        color: var(--muted);
+        font-size: 10px;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+      }
+      .info-value { font-weight: 600; font-size: 12px; }
+
+      .select-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 4px 0 8px;
+      }
+      .select-row button {
+        height: 30px;
+        font-size: 12px;
+        padding: 4px 10px;
+        white-space: nowrap;
+      }
+
+      .period-range .form-control {
+        height: 28px;
+        font-size: 11px;
+      }
+
+      /* ── Category pills ── */
+      .choice-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-bottom: 6px;
+      }
+      .choice-pill {
+        border: 1px solid #d9e3f7;
+        background: #f7f9ff;
+        color: var(--text);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .choice-pill.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+
+      /* ── Type list: 3-column ── */
+      .type-list {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .type-card {
+        width: 100%;
+        min-height: 44px;
+        text-align: center;
+        border: 1px solid #dfe7f5;
+        background: #fbfcff;
+        border-radius: 8px;
+        padding: 8px 6px;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+      .type-card.active {
+        background: #edf3ff;
+        border-color: #9ebcff;
+      }
+      .type-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text);
+        line-height: 1.2;
+      }
+      .type-sub {
+        color: var(--muted);
+        font-size: 10px;
+        margin-top: 2px;
+      }
+
+      /* ── Status / return table ── */
+      #returnStatus { padding: 0 12px 8px; }
+      #returnStatus .row { margin-left: 0; margin-right: 0; }
+      #returnStatus [class*="col"] { padding-left: 0; padding-right: 0; }
+
+      table.table-status {
+        width: 100%;
+        margin-bottom: 0;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      table.table-status th, table.table-status td {
+        border: 1px solid #e6ebf5;
+        padding: 5px 6px;
+        vertical-align: middle;
+      }
+      table.table-status th {
+        background: #f1f4fb;
+        font-weight: 700;
+        color: #3b4862;
+      }
+      #returnStatus table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      #returnStatus th, #returnStatus td {
+        border: 1px solid #e6ebf5;
+        padding: 5px 6px;
+        vertical-align: middle;
+      }
+      #returnStatus th {
+        background: #f1f4fb;
+        font-weight: 700;
+        color: #3b4862;
+      }
+
+      /* ── Pills ── */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .pill.success { background: #e7f4ed; color: var(--success); }
+      .pill.warning { background: #fff6d6; color: #946200; }
+      .pill.danger  { background: #ffe3e3; color: var(--danger); }
+      .pill.muted   { background: #eef2f7; color: var(--muted); }
+
+      /* ── Alert ── */
+      .alert-inline {
+        margin: 6px 12px;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+
+      /* ── Activity log ── */
+      .activity {
+        padding: 8px 12px 10px;
+        border-top: 1px solid #e6ebf5;
+        margin-top: 4px;
+      }
+      .activity h6 {
+        font-size: 10px;
+        font-weight: 700;
+        margin: 0 0 4px;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .activity-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 3px;
+        max-height: 80px;
+        overflow-y: auto;
+      }
+      .activity-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 4px 6px;
+        border-radius: 5px;
+        background: #eef2f7;
+        font-size: 10px;
+        word-break: break-all;
+      }
+
+      /* ── Status row ── */
+      #status { padding: 4px 12px 0; }
+      #statusText { font-size: 11px; color: var(--muted); margin: 0; }
+
+      /* ── Footer ── */
+      .footer-note {
+        color: var(--muted);
+        font-size: 10px;
+        text-align: center;
+        padding: 4px 12px 6px;
+      }
+
+      /* ── Misc ── */
+      .small-note { color: var(--muted); font-size: 10px; margin: 0 12px 6px; }
+
+      /* ── Messages (not on portal / not on dashboard) ── */
+      #msgOtherWebsite .p-3,
+      #msgNotOnReturnDashboard .p-3 {
+        padding: 10px 12px !important;
+      }
+      #msgOtherWebsite h5,
+      #msgNotOnReturnDashboard h5 {
+        font-size: 13px;
+      }
+
+      /* ── Dark Mode Toggle Button ── */
+      #darkModeBtn {
+        background: none;
+        border: 1px solid #dfe7ff;
+        border-radius: 20px;
+        padding: 2px 8px;
+        font-size: 12px;
+        cursor: pointer;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      #darkModeBtn:hover { background: var(--card); }
+
+      /* ── Client Folder Toggle ── */
+      #folderToggleWrap {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        color: var(--muted);
+        user-select: none;
+        cursor: pointer;
+      }
+      .neo-toggle {
+        position: relative;
+        width: 28px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+      .neo-toggle input { opacity: 0; width: 0; height: 0; }
+      .neo-toggle-track {
+        position: absolute;
+        inset: 0;
+        background: #cdd5e0;
+        border-radius: 18px;
+        transition: background 0.2s;
+      }
+      .neo-toggle input:checked ~ .neo-toggle-track { background: var(--primary); }
+      .neo-toggle-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        background: #fff;
+        border-radius: 50%;
+        transition: left 0.2s;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      }
+      .neo-toggle input:checked ~ .neo-toggle-thumb { left: 14px; }
+
+      /* ── Dark Mode ── */
+      body.dark {
+        --bg: #0f1117;
+        --bg-accent: #1a1a2e;
+        --primary: #5b8aff;
+        --success: #22c55e;
+        --warning: #f0b429;
+        --danger: #ef4444;
+        --card: #1e2130;
+        --text: #e2e8f8;
+        --muted: #8892a4;
+        --shadow: 0 4px 16px rgba(0,0,0,0.45);
+        background: #0f1117;
+      }
+      body.dark .header-bar {
+        background: linear-gradient(120deg, #1a1f3a, #1e2130);
+        border-color: #2a3050;
+      }
+      body.dark select, body.dark input, body.dark textarea {
+        background: #1a1f3a;
+        color: var(--text);
+        border-color: #2a3050;
+      }
+      body.dark table th { background: #1a1f3a; }
+      body.dark table td { border-color: #2a3050; }
+      body.dark .pill { background: #2a3050; }
+      body.dark .choice-pill { background: #1a1f3a; border-color: #2a3050; color: var(--text); }
+      body.dark .choice-pill.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+      body.dark .type-card { background: #1a1f3a; border-color: #2a3050; }
+      body.dark .type-card.active { background: #1e3060; border-color: var(--primary); }
+      body.dark .activity-item { background: #1a1f3a; }
+      body.dark #darkModeBtn { border-color: #2a3050; }
+      body.dark .activity { border-color: #2a3050; }
+
+      /* ── Converter/Schema panels — hidden in popup mode ── */
+      #converterPanel, #schemaPanel { display: none !important; }
+
+      /* ── tool-mode hides portal-only sections ── */
+      body.tool-mode #msgOtherWebsite,
+      body.tool-mode #msgNotOnReturnDashboard,
+      body.tool-mode #businessInfo,
+      body.tool-mode .activity,
+      body.tool-mode #status,
+      body.tool-mode .footer-note { display: none !important; }
+    </style>
+    <title>GC Returns Pro</title>
+  </head>
+  <body class="shell">
+    <!-- jQuery must load BEFORE bootstrap: bootstrap.bundle.min.js is v4.1.3,
+         which is a jQuery plugin and reads $.fn at load. Without this it throws
+         "Cannot read properties of undefined (reading 'fn')". -->
+    <script src="jquery.min.js"></script>
+    <script src="bootstrap.bundle.min.js"></script>
+    <script src="jszip.min.js"></script>
+    <script src="xlsx.full.min.js"></script>
+    <script src="moment.min.js"></script>
+    <script src="registry.bundle.js"></script>
+    <script src="computed-engine.js"></script>
+    <script type="module" src="src/modules/Returns-Preparation/GSTR-1-Excel-to-JSON.js"></script>
+    <script src="popup.js"></script>
+
+    <div>
+      <!-- ── Header bar removed: client name/GSTIN now shown once in the business-info card below, and the action controls (folder toggle, Get All, Notices, Vendors, dark mode) were moved down into that card. -->
+      <!-- Hidden branding stubs kept so hidden Converter/Schema panels can still set titles without errors. -->
+      <span id="appHeaderTitle" hidden></span>
+      <span id="appHeaderSub" hidden></span>
+
+      <!-- ── Hidden panels (converter/schema kept for JS compatibility, hidden via CSS) ── -->
+      <div id="converterPanel" hidden="true">
+        <div class="converter-panel">
+          <div class="converter-toolbar">
+            <div>
+              <p class="header-title mb-0">Standalone Converters</p>
+            </div>
+            <button class="btn btn-link btn-sm p-0" type="button" id="closeConverterBtn">Close</button>
+          </div>
+          <div class="converter-dropzone" id="converterDropzone">
+            <h6>Drag and drop files here</h6>
+            <p>or use the file picker to load one or more JSON files for conversion.</p>
+            <div class="converter-actions justify-content-center">
+              <input type="file" id="converterFileInput" accept=".json,application/json" multiple hidden>
+              <button class="btn btn-primary btn-sm" type="button" id="pickConverterFilesBtn">Choose Files</button>
+            </div>
+          </div>
+          <div class="converter-grid">
+            <div class="converter-side">
+              <label class="info-label mb-2 d-block" for="converterReturnType">Return type</label>
+              <select class="custom-select custom-select-sm mb-3" id="converterReturnType">
+                <option value="AUTO">Auto detect JSON type</option>
+                <option value="GSTR1">GSTR-1 JSON to Excel</option>
+                <option value="GSTR1A">GSTR-1A JSON to Excel</option>
+                <option value="GSTR2A">GSTR-2A JSON to Excel</option>
+                <option value="GSTR2B">GSTR-2B JSON to Excel</option>
+                <option value="GSTR3B">GSTR-3B JSON to Excel</option>
+                <option value="GENERIC">Generic JSON to Excel</option>
+              </select>
+              <label class="info-label mb-2 d-block">Loaded files</label>
+              <ul class="converter-files" id="converterFiles">
+                <li class="converter-file text-muted">No files loaded yet.</li>
+              </ul>
+              <div class="converter-actions">
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="clearConverterFilesBtn">Clear</button>
+              </div>
+            </div>
+            <div class="converter-main">
+              <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+                <div>
+                  <p class="header-title mb-0" style="font-size:14px;">Conversion Output</p>
+                  <p class="header-sub mb-0" id="converterSummary">Load JSON files to generate Excel output.</p>
+                </div>
+              </div>
+              <div class="converter-actions">
+                <button class="btn btn-success btn-sm" type="button" id="converterDownloadSingleBtn">Download Excel</button>
+                <button class="btn btn-primary btn-sm" type="button" id="converterDownloadCombinedBtn">Download Combined Excel</button>
+              </div>
+              <div class="converter-note" id="converterStatusNote">Single-file mode exports one workbook.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="schemaPanel" hidden="true">
+        <div class="schema-panel">
+          <div class="schema-toolbar">
+            <div>
+              <p class="header-title mb-0">Schema Manager</p>
+            </div>
+            <button class="btn btn-link btn-sm p-0" type="button" id="closeSchemaBtn">Close</button>
+          </div>
+          <div class="schema-grid">
+            <div class="schema-side">
+              <label class="info-label mb-2 d-block" for="schemaReturnType">Return type</label>
+              <select class="custom-select custom-select-sm mb-3" id="schemaReturnType"></select>
+              <label class="info-label mb-2 d-block" for="schemaPasteArea">Paste schema rows</label>
+              <textarea class="form-control schema-paste" id="schemaPasteArea" placeholder="Paste from Excel like: return|key|abbrevation or key&lt;TAB&gt;abbreviation"></textarea>
+              <input type="file" id="schemaImportFile" accept=".txt,.tsv,.csv,.json" hidden>
+              <div class="schema-actions">
+                <button class="btn btn-primary btn-sm" type="button" id="schemaImportPasteBtn">Import Pasted Rows</button>
+                <button class="btn btn-outline-primary btn-sm" type="button" id="schemaPickFileBtn">Import File</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="schemaExportBtn">Export Excel</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" id="schemaCopyBtn">Copy Table</button>
+              </div>
+              <div class="schema-note" id="schemaStatusNote">Keys added automatically on conversion.</div>
+            </div>
+            <div class="schema-main">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                  <p class="header-title mb-0" style="font-size:14px;">Schema Table</p>
+                </div>
+                <button class="btn btn-success btn-sm" type="button" id="schemaSaveBtn">Save Changes</button>
+              </div>
+              <div class="schema-table-wrap">
+                <table class="schema-table">
+                  <thead>
+                    <tr>
+                      <th style="width:50px;">#</th>
+                      <th style="width:160px;">Key</th>
+                      <th>Abbreviation</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schemaTableBody">
+                    <tr><td colspan="3" class="text-muted">No schema entries yet.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Not on portal ── -->
+      <div id="msgOtherWebsite" hidden="true">
+        <div class="p-3">
+          <h5 class="mb-2">This extension works on GST Portal!</h5>
+          <p class="mb-2 text-muted" style="font-size:12px;">Open GST Portal and sign in to download GST returns.</p>
+          <a class="btn btn-primary btn-sm" href="https://www.gst.gov.in" target="_blank">Open GST Portal</a>
+        </div>
+      </div>
+
+      <!-- ── Not on return dashboard ── -->
+      <div id="msgNotOnReturnDashboard" hidden="true">
+        <div class="p-3">
+          <h5 class="mb-2">Open Return Dashboard</h5>
+          <p class="mb-2 text-muted" style="font-size:12px;" id="notOnDashboardHint">Log in to GST Portal and open the return dashboard to continue.</p>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-open-return-dashboard">Open Returns Dashboard</button>
+        </div>
+      </div>
+
+      <!-- ── Business info + workspace ── -->
+      <div id="businessInfo" hidden="true">
+        <div class="p-3 pb-0">
+          <div class="biz-header">
+            <div>
+              <p class="header-title mb-0" id="businessName">Business Name</p>
+              <small class="text-muted" id="businessSub" style="font-size:11px;">GSTIN &amp; Reg Type</small>
+            </div>
+            <span class="pill muted" id="gstStatusPill">Not Filed</span>
+          </div>
+
+          <!-- ── Action controls moved down from the old header bar ── -->
+          <div class="biz-actions">
+            <label id="folderToggleWrap" title="Save downloads in a folder named after the client">
+              <span class="neo-toggle">
+                <input type="checkbox" id="clientFolderToggle">
+                <span class="neo-toggle-track"></span>
+                <span class="neo-toggle-thumb"></span>
+              </span>
+              <span>📁</span>
+            </label>
+            <button id="getAllBtn" class="btn btn-success btn-sm" title="Download everything for a financial year as one ZIP">⬇ Get All</button>
+            <button id="noticesQuickBtn" class="btn btn-outline-secondary btn-sm" title="Download Notices &amp; Orders as Excel">📩 Notices</button>
+            <button id="vendorDirBtn" class="btn btn-outline-secondary btn-sm" title="Vendor directory">📇 Vendors</button>
+            <button id="invoiceSearchBtn" class="btn btn-outline-secondary btn-sm" title="Search invoice numbers across GSTR-2B periods">🔎 Invoices</button>
+            <button id="darkModeBtn" title="Toggle dark / light mode">🌙</button>
+          </div>
+
+          <div id="workspace" hidden="true">
+            <div class="info-grid">
+              <!-- FY + custom period selectors -->
+              <div>
+                <div class="info-value" id="finYearWrap">
+                  <div id="returnPeriodWrap">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                      <span class="info-label mb-0">Financial Year</span>
+                      <button class="btn btn-link btn-sm p-0 text-uppercase font-weight-bold" style="font-size:10px;" type="button" id="toggleCustomBtn">Custom Periods</button>
+                    </div>
+                    <select class="custom-select custom-select-sm w-100" id="finYear"></select>
+                    <div id="customPeriodsWrap" hidden class="mt-2">
+                      <div class="d-flex period-range">
+                        <div class="mr-2" style="flex:1">
+                          <label class="info-label mb-1 d-block">From</label>
+                          <select class="custom-select custom-select-sm w-100" id="periodFrom"></select>
+                        </div>
+                        <div style="flex:1">
+                          <label class="info-label mb-1 d-block">To</label>
+                          <select class="custom-select custom-select-sm w-100" id="periodTo"></select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="ledgerDateWrap" hidden class="mt-1">
+                    <div class="d-flex period-range">
+                      <div class="mr-2" style="flex:1">
+                        <label class="info-label mb-1 d-block" for="ledgerDateFrom">From date</label>
+                        <input type="date" class="form-control form-control-sm" id="ledgerDateFrom">
+                      </div>
+                      <div style="flex:1">
+                        <label class="info-label mb-1 d-block" for="ledgerDateTo">To date</label>
+                        <input type="date" class="form-control form-control-sm" id="ledgerDateTo">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Category + subcategory -->
+              <div>
+                <label class="info-label mb-1 d-block">Category</label>
+                <div class="choice-pills" id="categoryPills"></div>
+                <label class="info-label mb-1 d-block">Subcategory</label>
+                <div class="type-list" id="typeList"></div>
+                <!-- Hidden selects kept for JS compatibility -->
+                <div hidden>
+                  <select class="custom-select custom-select-sm mb-2" id="gstCategory"></select>
+                  <select class="custom-select custom-select-sm" id="gstReturnType"></select>
+                </div>
+                <small class="text-muted d-block mt-1" style="font-size:10px;">Select a subcategory to refresh and load data below.</small>
+
+                <div id="exportViewSection">
+                <label class="info-label mb-1 d-block mt-2">Excel export view</label>
+                <div class="btn-group btn-group-sm w-100" role="group" id="exportViewGroup">
+                  <button type="button" class="btn btn-outline-primary active" id="exportViewPortal" data-view="portal">Portal view</button>
+                  <button type="button" class="btn btn-outline-primary" id="exportViewConsolidated" data-view="consolidated">Consolidated</button>
+                </div>
+                <small class="text-muted d-block mt-1" style="font-size:10px;">Consolidated: one sheet per return with a Sheet&nbsp;Name column; section rows appended so column totals tie to the summary. HSN/Docs stay as separate sheets.</small>
+                </div>
+              </div>
+            </div>
+
+            <!-- Refresh row -->
+            <div class="select-row">
+              <div>
+                <small class="text-muted d-block" id="hint-return" hidden style="font-size:10px;"></small>
+              </div>
+              <button class="btn btn-primary btn-sm" type="button" id="refresh">⟳ Refresh</button>
+            </div>
+          </div><!-- /workspace -->
+        </div>
+
+        <!-- Generating banner -->
+        <div id="banner-generating" class="alert alert-warning alert-inline" role="alert" hidden>
+          GST Portal is generating your files. Please check again after sometime.
+        </div>
+
+        <!-- Period/status table -->
+        <div id="returnStatus" class="px-3 pb-3"></div>
+      </div><!-- /businessInfo -->
+
+      <!-- ── Activity Log ── -->
+      <div class="activity">
+        <h6>Activity Log</h6>
+        <ul class="activity-list" id="activityLog">
+          <li class="activity-item text-muted">No activity yet</li>
+        </ul>
+      </div>
+
+      <!-- ── Status text ── -->
+      <div id="status">
+        <h6 id="statusText" style="font-size:11px; color:var(--muted); margin:0; padding:2px 12px;">Loading...</h6>
+      </div>
+
+      <div class="footer-note">Keep the GST Portal tab open while using this.</div>
+    </div>
+  </body>
+</html>

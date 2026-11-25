@@ -1,0 +1,1 @@
+export default { category:"refund", key:"REFUND_IDS", listed:true, order:2, recoKinds:["3B","2B","1SUM","1"], config:{ key:"REFUND_IDS", display:"Refund - Inverted Duty Structure", fileNameCode:"REFUND_IDS", apiCode:"REFUND_IDS", summaryType:"REFUND_IDS" } };

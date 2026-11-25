@@ -1,0 +1,1 @@
+export default { category:"summary", key:"RCM_RECO", listed:true, order:15, recoKinds:["3B","2B"], config:{ key:"RCM_RECO", display:"RCM Reconciliation", fileNameCode:"RCM_RECO", apiCode:"RCM_RECO", summaryType:"RCM_RECO", needsBooksFile:true } };
