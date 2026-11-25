@@ -2,44 +2,75 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GC Returns Pro – Website</title>
 <style>
- :root{color-scheme:light dark;--bg:#fff;--fg:#1a1a1a;--card:#f4f5f7;--ok:#0a7d33;--bad:#b3261e}
- @media(prefers-color-scheme:dark){:root{--bg:#16181c;--fg:#e8e8e8;--card:#22252b;--ok:#4cd07d;--bad:#ff8a80}}
+ :root{color-scheme:light dark;--bg:#fff;--fg:#1a1a1a;--card:#f4f5f7;--ok:#0a7d33;--bad:#b3261e;--accent:#1a56db}
+ @media(prefers-color-scheme:dark){:root{--bg:#16181c;--fg:#e8e8e8;--card:#22252b;--ok:#4cd07d;--bad:#ff8a80;--accent:#6ea0ff}}
  body{font:16px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg);max-width:720px;margin:2rem auto;padding:0 1rem}
  .card{background:var(--card);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0}
- button{font:inherit;padding:.5rem .9rem;margin:.2rem .3rem .2rem 0;border-radius:8px;border:1px solid #8886;cursor:pointer}
+ button,.btn{font:inherit;padding:.55rem 1rem;margin:.2rem .3rem .2rem 0;border-radius:8px;border:1px solid #8886;cursor:pointer;background:transparent;color:inherit;text-decoration:none;display:inline-block}
+ .primary{background:var(--accent);color:#fff;border-color:var(--accent)}
  pre{white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto}
  .ok{color:var(--ok)}.bad{color:var(--bad)}
+ #modal{position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;padding:1rem;z-index:10}
+ #modal[hidden]{display:none}
+ #modal .box{background:var(--bg);color:var(--fg);border-radius:14px;max-width:520px;width:100%;padding:1.4rem 1.5rem;max-height:90vh;overflow:auto}
+ #modal ol{padding-left:1.2rem} #modal li{margin:.4rem 0}
 </style></head><body>
 <h1>GC Returns Pro</h1>
 <div class="card"><b>Bridge status:</b> <span id="status">checking…</span>
- <div id="install" hidden><p>Install the bridge once, then reload this page.</p>
- <a href="https://github.com/A3th0r/NEOGST/releases/latest/download/GCReturnsPro-Setup.exe">Download GCReturnsPro-Setup.exe</a></div></div>
+ <button id="btnHelp" hidden>Install bridge</button></div>
 <div class="card"><b>Test the bridge</b><br>
  <button id="btnOpen">Open GST login (background tab)</button>
  <button id="btnTab">Is a GST tab open?</button>
  <button id="btnGstin">Look up a GSTIN…</button>
  <pre id="out"></pre></div>
 <p><small>Independent tool, not affiliated with GSTN. Your data stays in your browser; no server is used.</small></p>
+
+<div id="modal" hidden><div class="box" role="dialog" aria-labelledby="mt">
+ <h2 id="mt" style="margin-top:0">Install the GC Returns Pro bridge</h2>
+ <p>This website needs a small helper in your browser (one-time setup, Windows with Chrome, Edge, Brave or Vivaldi).</p>
+ <ol>
+  <li><b>Download</b> the installer and run it.</li>
+  <li>In the browser page that opens, turn on <b>Developer mode</b> (top right).</li>
+  <li>Click <b>Load unpacked</b>, press <b>Ctrl+V</b> to paste the folder path, and choose <b>Select Folder</b>.</li>
+  <li>Come back here. This box closes by itself when connected.</li>
+ </ol>
+ <p><a class="btn primary" href="https://github.com/A3th0r/NEOGST/releases/latest/download/GCReturnsPro-Setup.exe">Download installer (.exe)</a></p>
+ <p><small>Windows may warn about an unsigned file; choose “Keep” / “Run anyway”. Prefer manual? <a href="GCReturnsPro-extension.zip">Download the extension ZIP</a>, unzip, and use Load unpacked.</small></p>
+ <button id="btnClose">Close</button> <span id="waiting" style="opacity:.7"> waiting for the bridge…</span>
+</div></div>
+
 <script>
-// Extension IDs to try: the dev/unpacked ID below, plus the Chrome Web Store ID once you publish.
+// Extension IDs to try: the unpacked ID below, plus the Chrome Web Store ID once you publish.
 const EXTENSION_IDS = ["jgbigkbpalolljkpdccfkpagjghcpkol"];
-let extId = null;
-const out = document.getElementById("out"), show = v => out.textContent = JSON.stringify(v, null, 2);
+let extId = null, timer = null;
+const $ = id => document.getElementById(id);
+const show = v => $("out").textContent = JSON.stringify(v, null, 2);
 function send(id, msg) {
   return new Promise(res => {
-    if (!(window.chrome && chrome.runtime && chrome.runtime.sendMessage)) return res({ok:false,error:"Use Chrome or Edge on desktop"});
+    if (!(window.chrome && chrome.runtime && chrome.runtime.sendMessage)) return res({ok:false,error:"Use Chrome, Edge, Brave or Vivaldi on desktop"});
     try { chrome.runtime.sendMessage(id, msg, r => res(chrome.runtime.lastError ? {ok:false,error:chrome.runtime.lastError.message} : r)); }
     catch (e) { res({ok:false,error:String(e)}); }
   });
 }
 async function bridge(msg) { return extId ? send(extId, msg) : {ok:false,error:"Bridge not installed"}; }
+async function detect() {
+  for (const id of EXTENSION_IDS) { const r = await send(id, {action:"ping"}); if (r && r.ok) { extId = id; return true; } }
+  return false;
+}
+function setState(connected) {
+  const s = $("status");
+  s.textContent = connected ? "connected ✓" : "not installed"; s.className = connected ? "ok" : "bad";
+  $("btnHelp").hidden = connected;
+  $("modal").hidden = connected || $("modal").dataset.dismissed === "1";
+  if (connected && timer) { clearInterval(timer); timer = null; }
+}
 (async () => {
-  for (const id of EXTENSION_IDS) { const r = await send(id, {action:"ping"}); if (r && r.ok) { extId = id; break; } }
-  const s = document.getElementById("status");
-  if (extId) { s.textContent = "connected ✓"; s.className = "ok"; }
-  else { s.textContent = "not installed"; s.className = "bad"; document.getElementById("install").hidden = false; }
+  setState(await detect());
+  if (!extId) timer = setInterval(async () => setState(await detect()), 3000);
 })();
-document.getElementById("btnOpen").onclick = async () => show(await bridge({action:"open-portal", background:true}));
-document.getElementById("btnTab").onclick = async () => show(await bridge({action:"gst-tab-status"}));
-document.getElementById("btnGstin").onclick = async () => { const g = prompt("GSTIN"); if (g) show(await bridge({action:"taxpayer-search", gstin:g})); };
+$("btnHelp").onclick = () => { $("modal").dataset.dismissed = "0"; $("modal").hidden = false; };
+$("btnClose").onclick = () => { $("modal").dataset.dismissed = "1"; $("modal").hidden = true; };
+$("btnOpen").onclick = async () => show(await bridge({action:"open-portal", background:true}));
+$("btnTab").onclick = async () => show(await bridge({action:"gst-tab-status"}));
+$("btnGstin").onclick = async () => { const g = prompt("GSTIN"); if (g) show(await bridge({action:"taxpayer-search", gstin:g})); };
 </script></body></html>
