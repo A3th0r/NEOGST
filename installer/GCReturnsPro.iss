@@ -29,30 +29,39 @@ Name: "{userprograms}\GC Returns Pro website"; Filename: "{#SiteUrl}"
 [Run]
 ; 1) copy the extension folder path to the clipboard so it can be pasted in "Load unpacked"
 Filename: "powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -Command ""Set-Clipboard -Value '{app}\extension'"""; Flags: runhidden
-; 2) open the browser's extensions page
-Filename: "{code:BrowserExe}"; Parameters: "{code:ExtensionsUrl}"; Description: "Open the browser extensions page now"; Flags: postinstall nowait skipifsilent; Check: HasBrowser
+; 2) open the extensions page in every Chromium browser found on this PC
+Filename: "{code:ExePath|chrome}";  Parameters: "chrome://extensions";  Description: "Open Google Chrome extensions page";  Flags: postinstall nowait skipifsilent; Check: Has('chrome')
+Filename: "{code:ExePath|edge}";    Parameters: "edge://extensions";    Description: "Open Microsoft Edge extensions page"; Flags: postinstall nowait skipifsilent; Check: Has('edge')
+Filename: "{code:ExePath|brave}";   Parameters: "brave://extensions";   Description: "Open Brave extensions page";           Flags: postinstall nowait skipifsilent; Check: Has('brave')
+Filename: "{code:ExePath|vivaldi}"; Parameters: "vivaldi://extensions"; Description: "Open Vivaldi extensions page";         Flags: postinstall nowait skipifsilent; Check: Has('vivaldi')
+Filename: "{code:ExePath|opera}";   Parameters: "opera://extensions";   Description: "Open Opera extensions page";           Flags: postinstall nowait skipifsilent; Check: Has('opera')
 
 [Messages]
-FinishedLabel=The extension files are installed in:%n%n{app}\extension%n%nThe folder path has been copied to your clipboard.%n%nLast step (one time only, done in your browser):%n  1. On the extensions page, turn ON "Developer mode" (top right).%n  2. Click "Load unpacked".%n  3. Paste the path (Ctrl+V) and press "Select Folder".%n%nThen open the website: {#SiteUrl}
+FinishedLabel=The extension files are installed in:%n%n{app}\extension%n%nThe folder path is copied to your clipboard. Tick each browser below to open its extensions page, then in EACH browser (one time only):%n  1. Turn ON "Developer mode".%n  2. Click "Load unpacked".%n  3. Paste the path (Ctrl+V) and select the folder.%n%nThen open: {#SiteUrl}
 
 [Code]
-var
-  Exe, Url: string;
-
-function FindBrowser(): Boolean;
+function Probe(Key: string; Fallback: string): string;
 var
   P: string;
 begin
-  Result := True;
-  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe', '', P) or
-     RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe', '', P) then
-  begin Exe := P; Url := 'chrome://extensions'; exit; end;
-  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe', '', P) or
-     RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe', '', P) then
-  begin Exe := P; Url := 'edge://extensions'; exit; end;
-  Result := False;
+  Result := '';
+  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\' + Key, '', P) or
+     RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\' + Key, '', P) then
+    if FileExists(P) then begin Result := P; exit; end;
+  if (Fallback <> '') and FileExists(ExpandConstant(Fallback)) then Result := ExpandConstant(Fallback);
 end;
 
-function HasBrowser(): Boolean; begin Result := FindBrowser(); end;
-function BrowserExe(Param: string): string; begin FindBrowser(); Result := Exe; end;
-function ExtensionsUrl(Param: string): string; begin FindBrowser(); Result := Url; end;
+function ExePath(Name: string): string;
+begin
+  if Name = 'chrome' then Result := Probe('chrome.exe', '')
+  else if Name = 'edge' then Result := Probe('msedge.exe', '')
+  else if Name = 'brave' then Result := Probe('brave.exe', '{localappdata}\BraveSoftware\Brave-Browser\Application\brave.exe')
+  else if Name = 'vivaldi' then Result := Probe('vivaldi.exe', '{localappdata}\Vivaldi\Application\vivaldi.exe')
+  else if Name = 'opera' then Result := Probe('opera.exe', '{localappdata}\Programs\Opera\opera.exe')
+  else Result := '';
+end;
+
+function Has(Name: string): Boolean;
+begin
+  Result := ExePath(Name) <> '';
+end;
