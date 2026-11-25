@@ -3,7 +3,7 @@
 ; Optional:      /DUpdateXmlUrl=<URL to your hosted update.xml>
 
 #ifndef MyVersion
-  #define MyVersion "2.8.0"
+  #define MyVersion "2.8.31"
 #endif
 #ifndef ExtId
   #error ExtId is required: pass the 32-character extension ID generated from your private .pem key (/DExtId=...)
