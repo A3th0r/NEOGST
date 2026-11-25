@@ -1,0 +1,37 @@
+GC RETURNS PRO — USER CONSENT POLICY
+
+Please read carefully. Select "I consent" only if you agree to ALL of the following.
+
+1. WHAT WILL BE INSTALLED
+   - The "GC Returns Pro (Website Bridge)" browser extension.
+   - It is installed automatically, using browser management policies,
+     in Google Chrome, Microsoft Edge and Brave on this computer, for
+     all Windows users of this PC.
+   - These browsers will show "Managed by your organization" and the
+     extension cannot be removed from inside the browser.
+
+2. WHAT THE EXTENSION ACCESSES
+   - The GST portal (gst.gov.in and its sub-domains), including pages
+     you open while logged in.
+   - Cookies set by the GST portal, which include your login session.
+     These are used so GC Returns Pro can fetch and file return data
+     on your behalf while you are logged in.
+   - The GC Returns Pro website (a3th0r.github.io/NEOGST), to pass
+     data between the website and the GST portal.
+
+3. HOW YOUR DATA IS HANDLED
+   - [Describe exactly where GST data and cookies go: e.g. "Data stays
+     in your browser and is never sent to any other server."]
+   - Your GST portal password is never read or stored.
+
+4. YOUR RESPONSIBILITIES
+   - Only use this software with GSTINs you are authorised to access.
+   - Review all data before filing. You remain responsible for returns
+     filed using this tool.
+
+5. REMOVING THE SOFTWARE
+   - Uninstall "GC Returns Pro" from Windows Settings > Apps. This
+     removes the extension from all browsers and deletes the policies.
+
+If you do not consent, select "I do not consent". Setup will exit and
+nothing will be installed or changed on this computer.
