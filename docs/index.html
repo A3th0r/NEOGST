@@ -63,7 +63,7 @@ function setState(connected) {
   $("btnHelp").hidden = connected;
   $("modal").hidden = connected || $("modal").dataset.dismissed === "1";
   if (connected && timer) { clearInterval(timer); timer = null; }
-}
+} 
 (async () => {
   setState(await detect());
   if (!extId) timer = setInterval(async () => setState(await detect()), 3000);
