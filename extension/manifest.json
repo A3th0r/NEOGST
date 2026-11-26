@@ -2,7 +2,7 @@
   "name": "GC Returns Pro",
   "short_name": "GC Returns Pro",
   "author": "Gaddam Chiranjeevi",
-  "version": "2.7.31",
+  "version": "2.8.31",
   "description": "Download GST returns from the GST Portal. Recos unified: the GSTR-3B reference is the horizontal combined sheet (periods across columns) that every ='GSTR-3B'! formula resolves into; the per-period portal view is kept as a hidden 'GSTR-3B (periods)' sheet. Right sides are consolidated single sheets (2B/2A/1) via SUMIFS. Applied to 3B-vs-2B, 3B-vs-2A, 3B-vs-1, 2A-vs-2B, 3B-ECL.",
   "manifest_version": 3,
   "permissions": [
