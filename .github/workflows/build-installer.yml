@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write         # needed to attach the .exe to a Release
+  pages: write            # lets the job trigger a Pages rebuild
 
 jobs:
   build:
@@ -18,8 +19,57 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $v = (Get-Content extension/manifest.json -Raw | ConvertFrom-Json).version
+          $v = (Get-Content docs/extension/manifest.json -Raw | ConvertFrom-Json).version
           "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      # Self-hosted force-install needs a signed .crx + update.xml served from GitHub Pages (/docs).
+      # One-time: add repo secret EXTENSION_PEM = full contents of the private .pem whose public key
+      # is the "key" in docs/extension/manifest.json (extension ID jacoeheldeffpdpjmnegnfpffdlkfbln).
+      - name: Build signed CRX and update.xml
+        shell: pwsh
+        env:
+          EXTENSION_PEM: ${{ secrets.EXTENSION_PEM }}
+        run: |
+          if (-not $env:EXTENSION_PEM) { throw "Secret EXTENSION_PEM is not set" }
+          $v = "${{ steps.ver.outputs.version }}"
+          $id = "jacoeheldeffpdpjmnegnfpffdlkfbln"
+          Set-Content -Path "$env:RUNNER_TEMP\ext.pem" -Value $env:EXTENSION_PEM -NoNewline
+          New-Item -ItemType Directory -Force dist | Out-Null
+          # Source lives in docs/extension. Copy it WITHOUT the previously built crx/update.xml, then pack that copy.
+          robocopy docs\extension "$env:RUNNER_TEMP\extsrc" /E /XF GCReturnsPro.crx update.xml /NFL /NDL /NJH /NJS | Out-Null
+          if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE)" }
+          npx --yes crx3 -p "$env:RUNNER_TEMP\ext.pem" -o "$env:RUNNER_TEMP\GCReturnsPro.crx" "$env:RUNNER_TEMP\extsrc"
+          if (-not (Test-Path "$env:RUNNER_TEMP\GCReturnsPro.crx")) { throw "CRX was not created" }
+          Copy-Item "$env:RUNNER_TEMP\GCReturnsPro.crx" docs\extension\GCReturnsPro.crx -Force
+          Remove-Item "$env:RUNNER_TEMP\ext.pem"
+          @"
+          <?xml version='1.0' encoding='UTF-8'?>
+          <gupdate xmlns='http://www.google.com/update2/response' protocol='2.0'>
+            <app appid='$id'>
+              <updatecheck codebase='https://a3th0r.github.io/NEOGST/extension/GCReturnsPro.crx' version='$v' />
+            </app>
+          </gupdate>
+          "@ | Set-Content -Path docs\extension\update.xml -Encoding utf8
+
+      - name: Publish CRX + update.xml to Pages
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name  "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\pub" | Out-Null
+          Copy-Item docs\extension\GCReturnsPro.crx, docs\extension\update.xml "$env:RUNNER_TEMP\pub" -Force
+          git fetch origin main
+          git checkout -f -B main origin/main
+          New-Item -ItemType Directory -Force docs\extension | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\pub\*" docs\extension -Force
+          git add -f docs/extension/GCReturnsPro.crx docs/extension/update.xml
+          git diff --cached --quiet; if ($LASTEXITCODE -ne 0) { git commit -m "Publish extension $env:GITHUB_REF_NAME"; git push origin main }
+          # Pushes made with GITHUB_TOKEN may not rebuild Pages, so request a build explicitly
+          gh api -X POST "repos/$env:GITHUB_REPOSITORY/pages/builds" 2>&1 | Write-Host
+          exit 0
 
       - name: Install Inno Setup
         shell: pwsh
@@ -32,7 +82,7 @@ jobs:
 
       - name: Zip the extension (for manual install)
         shell: pwsh
-        run: Compress-Archive -Path extension\* -DestinationPath dist\GCReturnsPro-extension.zip
+        run: Compress-Archive -Path "$env:RUNNER_TEMP\extsrc\*" -DestinationPath dist\GCReturnsPro-extension.zip
 
       - uses: actions/upload-artifact@v4
         with:
